@@ -59,6 +59,10 @@ def _print_help():
         '',
         'a',
         '    Automatically solve puzzle and show the solution.',
+        '',
+        'Puzzles newly created by "n" command are in the solved state.',
+        'Use of commands "r", "rr" and "f" on solvable (or solved) puzzle',
+        'is guaranteed to produce another solvable puzzle.',
     )))
 
 
@@ -267,8 +271,6 @@ class _Board(object):
         solutions = list(
             map(self._pattern_bits_to_coords,
                 self._combine_constraint_sets(constraint_sets)))
-        # TODO: Are there unsolvable puzzle combinations?
-        assert len(solutions) > 0, 'Unsolvable puzzle'
 
         # Shortest solutions first.
         solutions.sort(key=len)
@@ -452,6 +454,9 @@ def _shell(isatty):
                     ', '.join(str(len(s)) + ' steps' for s in solutions))
                 print('Will show one of the shortest.')
                 print()
+            elif len(solutions) == 0:
+                print('Puzzle is not solvable =(')
+                continue
             solution = solutions[0]
 
             demo = copy.copy(board)
