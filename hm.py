@@ -22,6 +22,10 @@ def _print_help():
         'n <W> <H>',
         '    Create board with specified <W>idth and <H>eight.',
         '    <W>idth and <H>eight must be >= 1 and <= %u' % (_MAX_BOARD_SIZE, ),
+        '    All cells are set to "1" (enabled) by default.',
+        '',
+        'c',
+        '    Clear board: set all cells to "0" (disabled).',
         '',
         'p',
         '    Print current board.',
@@ -363,6 +367,12 @@ def _shell(isatty):
                 continue
 
             board = _Board(width, height)
+            print(board)
+        elif _match_cmd(cmd, ('c', )):
+            if not _check_board(board):
+                continue
+
+            board.set_bits(0)
             print(board)
         elif _match_cmd(cmd, ('p', )):
             if not _check_board(board):
