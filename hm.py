@@ -213,20 +213,31 @@ class _Board(object):
     def _combine_constraint_sets(self, constraint_sets, bit_n=0,
                                  prev_covered=0b0, prev_constraint=0b0):
         if not constraint_sets:
-            return prev_constraint
+            yield prev_constraint
+            return
 
         for constraint in constraint_sets[0]:
             covered = self._patterns[bit_n]
 
             if constraint & prev_covered == prev_constraint & covered:
-                combined = self._combine_constraint_sets(
+                for combined in self._combine_constraint_sets(
                         constraint_sets[1:], bit_n + 1, prev_covered | covered,
-                        prev_constraint | constraint)
-                if combined is not None:
-                    # TODO: Are there puzzles with more than one solution?
-                    return combined
+                        prev_constraint | constraint):
+                    yield combined
 
-        return None
+    def _pattern_bits_to_coords(self, pattern_bits):
+        steps = []
+        for y in range(self._height - 1, -1, -1):
+            for x in range(self._width - 1, -1, -1):
+                bit_v = pattern_bits & 0b1
+                pattern_bits >>= 1
+
+                if bit_v:
+                    steps.append((x, y))
+
+        # Start walking from the top left corner.
+        steps.reverse()
+        return steps
 
     def solve(self):
         bits = self._bits
@@ -253,22 +264,15 @@ class _Board(object):
                         self._patterns_bits[bit_n], l))
             constraint_sets.append(constraint_set)
 
-        solution = self._combine_constraint_sets(constraint_sets)
+        solutions = list(
+            map(self._pattern_bits_to_coords,
+                self._combine_constraint_sets(constraint_sets)))
         # TODO: Are there unsolvable puzzle combinations?
-        assert solution is not None, 'Unsolvable puzzle'
+        assert len(solutions) > 0, 'Unsolvable puzzle'
 
-        solution_steps = []
-        for y in range(self._height - 1, -1, -1):
-            for x in range(self._width - 1, -1, -1):
-                bit_v = solution & 0b1
-                solution >>= 1
-
-                if bit_v:
-                    solution_steps.append((x, y))
-
-        solution_steps.reverse()
-
-        return solution_steps
+        # Shortest solutions first.
+        solutions.sort(key=len)
+        return solutions
 
 
 def _check_board(board):
@@ -441,7 +445,14 @@ def _shell(isatty):
             if not _check_board(board):
                 continue
 
-            solution = board.solve()
+            solutions = board.solve()
+            if len(solutions) > 1:
+                print(
+                    'More than one solution found:',
+                    ', '.join(str(len(s)) + ' steps' for s in solutions))
+                print('Will show one of the shortest.')
+                print()
+            solution = solutions[0]
 
             demo = copy.copy(board)
             print('0)')
