@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
+import copy
 import importlib
+import itertools
 import random
 import sys
 
@@ -50,6 +52,9 @@ def _print_help():
         '',
         'f <XY>',
         '    Flip cells around coordinates <X>:<Y>.',
+        '',
+        'a',
+        '    Automatically solve puzzle and show the solution.',
     )))
 
 
@@ -97,18 +102,27 @@ class _Board(object):
 
     def _init_patterns(self):
         self._patterns = {}
+        self._patterns_bits = {}
         for y in range(self._height):
             for x in range(self._width):
+                pat_n = self._bit_pos(x, y)
+
                 pat = self._bit(x, y)
+                self._patterns_bits[pat_n] = {pat_n}
                 if x:
                     pat |= self._bit(x - 1, y)
+                    self._patterns_bits[pat_n].add(self._bit_pos(x - 1, y))
                 if x < self._width - 1:
                     pat |= self._bit(x + 1, y)
+                    self._patterns_bits[pat_n].add(self._bit_pos(x + 1, y))
                 if y:
                     pat |= self._bit(x, y - 1)
+                    self._patterns_bits[pat_n].add(self._bit_pos(x, y - 1))
                 if y < self._height - 1:
                     pat |= self._bit(x, y + 1)
-                self._patterns[self._bit_pos(x, y)] = pat
+                    self._patterns_bits[pat_n].add(self._bit_pos(x, y + 1))
+
+                self._patterns[pat_n] = pat
 
     def __init__(self, width, height):
         self._width = width
@@ -191,6 +205,66 @@ class _Board(object):
             self._bits |= self._bit(x, y)
         else:
             self._bits &= ~self._bit(x, y)
+
+    def _combine_constraint_sets(self, constraint_sets, bit_n=0,
+                                 prev_covered=0b0, prev_constraint=0b0):
+        if not constraint_sets:
+            return prev_constraint
+
+        for constraint in constraint_sets[0]:
+            covered = self._patterns[bit_n]
+
+            if constraint & prev_covered == prev_constraint & covered:
+                combined = self._combine_constraint_sets(
+                        constraint_sets[1:], bit_n + 1, prev_covered | covered,
+                        prev_constraint | constraint)
+                if combined is not None:
+                    # TODO: Are there puzzles with more than one solution?
+                    return combined
+
+        return None
+
+    def solve(self):
+        bits = self._bits
+
+        constraint_sets = []
+        for bit_n in range(self.n_bits):
+            bit_v = bits & 0b1
+            bits >>= 1
+
+            if bit_v:
+                # Bit was XORed even number of times.
+                lengths = range(0, len(self._patterns_bits[bit_n]) + 1, 2)
+            else:
+                # Bit was XORed odd number of times.
+                lengths = range(1, len(self._patterns_bits[bit_n]) + 1, 2)
+
+            constraint_set = set()
+            for l in lengths:
+                constraint_set |= set(
+                    sum(
+                        0b1 << pat_bit_n
+                        for pat_bit_n in pat_set)
+                    for pat_set in itertools.combinations(
+                        self._patterns_bits[bit_n], l))
+            constraint_sets.append(constraint_set)
+
+        solution = self._combine_constraint_sets(constraint_sets)
+        # TODO: Are there unsolvable puzzle combinations?
+        assert solution is not None, 'Unsolvable puzzle'
+
+        solution_steps = []
+        for y in range(self._height - 1, -1, -1):
+            for x in range(self._width - 1, -1, -1):
+                bit_v = solution & 0b1
+                solution >>= 1
+
+                if bit_v:
+                    solution_steps.append((x, y))
+
+        solution_steps.reverse()
+
+        return solution_steps
 
 
 def _check_board(board):
@@ -353,6 +427,38 @@ def _shell(isatty):
             (x, y), = cmd_argv
             board.apply_pattern(x, y)
             print(board)
+        elif _match_cmd(cmd, ('a', )):
+            if not _check_board(board):
+                continue
+
+            solution = board.solve()
+
+            demo = copy.copy(board)
+            print('0)')
+            print(demo)
+            print()
+
+            if not solution:
+                print('Already solved!')
+                continue
+
+            step_n = 0
+            for step_x, step_y in solution:
+                step_n += 1
+                print(step_n, ') f ',
+                      chr(ord('a') + step_x), step_y + 1, sep='')
+                demo.apply_pattern(step_x, step_y)
+                print(demo)
+                print()
+
+            assert demo.is_solved(), 'Solver produced wrong solution'
+
+            print('Steps:')
+            step_n = 0
+            for step_x, step_y in solution:
+                step_n += 1
+                print('%2u) f ' % (step_n, ),
+                      chr(ord('a') + step_x), step_y + 1, sep='')
         else:
             print('[Error] Unknown command %r' % (' '.join(cmd), ))
             _print_basic_help()
