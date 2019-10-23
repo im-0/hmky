@@ -166,7 +166,7 @@ class _Board(object):
     def is_solved(self):
         return all((self._bits >> n) & 0b1 for n in range(self.n_bits))
 
-    def __str__(self):
+    def to_str(self, highlight_coords=()):
         if self.is_solved():
             h_char = '+'
             v_char = '!'
@@ -186,10 +186,17 @@ class _Board(object):
             str_board += h_line + '\n%u ' % (y + 1, ) + v_char
 
             for x in range(self._width):
-                if self._bits & self._bit(x, y):
-                    str_board += '\u2592\u2592'
+                if (x, y) in highlight_coords:
+                    cell_on = '\u2588' * 2
+                    cell_off = '\u2573' * 2
                 else:
-                    str_board += '  '
+                    cell_on = '\u2592' * 2
+                    cell_off = ' ' * 2
+
+                if self._bits & self._bit(x, y):
+                    str_board += cell_on
+                else:
+                    str_board += cell_off
                 str_board += v_char
 
             str_board += '\n'
@@ -197,6 +204,9 @@ class _Board(object):
         str_board += h_line
 
         return str_board
+
+    def __str__(self):
+        return self.to_str()
 
     def apply_n_rand(self, n_changes):
         for pat in random.sample(list(self._patterns.values()), n_changes):
@@ -460,7 +470,6 @@ def _shell(isatty):
             solution = solutions[0]
 
             demo = copy.copy(board)
-            print('0)')
             print(demo)
             print()
 
@@ -468,23 +477,19 @@ def _shell(isatty):
                 print('Already solved!')
                 continue
 
-            step_n = 0
-            for step_x, step_y in solution:
-                step_n += 1
-                print(step_n, ') f ',
-                      chr(ord('a') + step_x), step_y + 1, sep='')
-                demo.apply_pattern(step_x, step_y)
-                print(demo)
-                print()
-
-            assert demo.is_solved(), 'Solver produced wrong solution'
-
             print('Steps:')
             step_n = 0
             for step_x, step_y in solution:
                 step_n += 1
                 print('%2u) f ' % (step_n, ),
                       chr(ord('a') + step_x), step_y + 1, sep='')
+            print()
+
+            for step_x, step_y in solution:
+                demo.apply_pattern(step_x, step_y)
+            assert demo.is_solved(), 'Solver produced wrong solution'
+
+            print(demo.to_str(set(solution)))
         else:
             print('[Error] Unknown command %r' % (' '.join(cmd), ))
             _print_basic_help()
